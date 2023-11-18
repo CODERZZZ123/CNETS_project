@@ -58,4 +58,4 @@ def convert_format(input_file, output_file):
 
 
 # Example usage
-convert_format("service_Data.csv", "all_2.csv")
+convert_format("service_Data.csv", "service_map.csv")
