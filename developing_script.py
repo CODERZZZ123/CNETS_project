@@ -7,7 +7,7 @@ from collections import defaultdict
 import csv
 
 
-class ConnectionRecord:
+class Connection_Host_Client:
     def __init__(self, packet_list, idx):
         self.packet_list = packet_list
         self.idx = idx
@@ -117,7 +117,7 @@ class ConnectionRecord:
 
         pass
 
-    def get_connection_status(packets, ipv4=True):
+    def Connection_type_flags_status(packets, ipv4=True):
         def process_packet_key(packet, source_ip):
             flags = (packet.tcp.flags_syn, packet.tcp.flags_ack, packet.tcp.flags_reset, packet.tcp.flags_fin)
             return ('1' if source_ip == packet.ip.src else '0', *flags) if ipv4 else ('1' if source_ip == packet.ipv6.src else '0', *flags)
@@ -173,11 +173,11 @@ class ConnectionRecord:
         if "ip" in self.packet_list[0]:
             self.src_ip = self.packet_list[0].ip.src
             self.dst_ip = self.packet_list[0].ip.dst
-            self.status_flag = self.get_connection_status(self.packet_list)
+            self.status_flag = self.Connection_type_flags_status(self.packet_list)
         else:
             self.src_ip = self.packet_list[0].ipv6.src
             self.dst_ip = self.packet_list[0].ipv6.dst
-            self.status_flag = self.get_connection_status(self.packet_list, False)
+            self.status_flag = self.Connection_type_flags_status(self.packet_list, False)
         pass
 
     def __str__(self):
@@ -191,7 +191,7 @@ class ConnectionRecord:
 
 class NetworkPacketSniffer:
     def __init__(self, pcap_file, filename):
-        self.cap_file = pcap_file
+        self.file = pcap_file
         self.service_mapping = {}
         self.service_map_file = filename
         self.records = [
@@ -226,7 +226,7 @@ class NetworkPacketSniffer:
             pass
 
     def create_connection_records(self):
-        # cap = pyshark.FileCapture(self.cap_file)              # this method directly gets the packet already capture , using FIlecapture can also acheive real time but with few sec delay
+        # cap = pyshark.FileCapture(self.file)              # this method directly gets the packet already capture , using FIlecapture can also acheive real time but with few sec delay
         cap = pyshark.LiveCapture(interface=None)
 
         # figuring out how to stop this and continue the feature extraction process
@@ -244,7 +244,7 @@ class NetworkPacketSniffer:
 
         return dict(raw_connections)
 
-    def get_iana(self):
+    def get_protocol_port_service(self):
         filename = self.service_map_file
         with open(filename, "r", newline="") as csvfile:
             csvreader = csv.reader(csvfile)
@@ -260,12 +260,12 @@ class NetworkPacketSniffer:
                 except (IndexError, ValueError):
                     continue
 
-    def initialize_connection(self, raw_connections):
+    def connection_to_setup(self, raw_connections):
         connections = []
         idx = 0
 
         for key, packet_list in raw_connections.items():
-            connection = ConnectionRecord(packet_list, idx)
+            connection = Connection_Host_Client(packet_list, idx)
             connection.process(self.service_mapping)
             connections.append(connection)
             self.records.append(str(connection))
@@ -274,9 +274,9 @@ class NetworkPacketSniffer:
         return connections
 
     def process_packets(self):
-        service_mapping = self.get_iana()
+        service_mapping = self.get_protocol_port_service()
         raw_connections = self.create_connection_records()
-        connections = self.initialize_connection(raw_connections, service_mapping)
+        connections = self.connection_to_setup(raw_connections, service_mapping)
 
         # other feature like host features and server feature to be added soon
 
@@ -291,11 +291,11 @@ class NetworkPacketSniffer:
 def main():
     service_file = "service_map.csv"
     if len(argv) == 1:
-        cap_file = None
-        sniffer = NetworkPacketSniffer(cap_file, service_file)
+        file_captures = None
+        sniffer = NetworkPacketSniffer(file_captures, service_file)
     elif len(argv) == 2:
-        cap_file = argv[1]
-        sniffer = NetworkPacketSniffer(cap_file, service_file)
+        file_captures = argv[1]
+        sniffer = NetworkPacketSniffer(file_captures, service_file)
     else:
         print(
             "-------------------------=-----------------------------------------------------------------------"
