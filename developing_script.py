@@ -6,6 +6,7 @@ from sys import argv
 from collections import defaultdict
 import csv
 
+
 class ConnectionRecord:
     def __init__(self, packet_list, idx):
         self.packet_list = packet_list
@@ -48,7 +49,7 @@ class ConnectionRecord:
         self._process_bytes_land_wrong_urgent_timestamp()
         self._process_status_flag_IP()
 
-    def _process_tcp(self ,service_mapping):
+    def _process_tcp(self, service_mapping):
         if self.src_port <= self.dst_port:
             if ("tcp", self.src_port) not in service_mapping.keys():
                 self.service = "Unassigned"
@@ -59,24 +60,24 @@ class ConnectionRecord:
                 self.service = "Unassigned"
             else:
                 self.service = service_mapping[("tcp", self.dst_port)]
-                
+
         pass
 
-    def _process_udp(self,service_mapping):
+    def _process_udp(self, service_mapping):
         if self.src_port <= self.dst_port:
-            if ('udp', self.src_port) not in service_mapping.keys():
-                self.service="Unassigned"
+            if ("udp", self.src_port) not in service_mapping.keys():
+                self.service = "Unassigned"
             else:
-                self.service = service_mapping[('udp', self.src_port)]
+                self.service = service_mapping[("udp", self.src_port)]
         else:
-            if ('udp', self.dst_port) not in service_mapping.keys():
-                self.service="Unassigned"
+            if ("udp", self.dst_port) not in service_mapping.keys():
+                self.service = "Unassigned"
             else:
-                self.service = service_mapping[('udp', self.dst_port)]
+                self.service = service_mapping[("udp", self.dst_port)]
         pass
 
     def _process_icmp(self):
-        self.service = 'eco_i'         
+        self.service = "eco_i"
         # for other services we will see what to do
         pass
 
@@ -87,10 +88,9 @@ class ConnectionRecord:
             self.land = 0
 
         self.timestamp = self.packet_list[-1].sniff_timestamp
-        
 
         for packet in self.packet_list:
-            if 'ip' in self.packet_list[0]:
+            if "ip" in self.packet_list[0]:
                 if self.src_ip == packet.ip.src:
                     self.src_bytes += int(packet.length.size)
                 else:
@@ -101,85 +101,76 @@ class ConnectionRecord:
                 else:
                     self.dst_bytes += int(packet.length.size)
 
-            
-            if self.protocol == 'tcp':
-                if packet.tcp.flags_urg == '1':
+            if self.protocol == "tcp":
+                if packet.tcp.flags_urg == "1":
                     self.urgent += 1
-                if packet.tcp.checksum_status != '2':
+                if packet.tcp.checksum_status != "2":
                     self.wrong_frag += 1
 
-            elif self.protocol == 'udp':
-                if packet.udp.checksum_status != '2':
+            elif self.protocol == "udp":
+                if packet.udp.checksum_status != "2":
                     self.wrong_frag += 1
 
-            elif self.protocol == 'icmp':
-                if packet.icmp.checksum_status != '2':
+            elif self.protocol == "icmp":
+                if packet.icmp.checksum_status != "2":
                     self.wrong_frag += 1
-        
+
         pass
 
     def get_connection_status(packets, ipv4=True):
-        
-
         def process_packet_key(packet, source_ip):
-            if ipv4:
-                if source_ip == packet.ip.src:
-                    return ('1', packet.tcp.flags_syn, packet.tcp.flags_ack, packet.tcp.flags_reset, packet.tcp.flags_fin)
-                else:
-                    return ('0', packet.tcp.flags_syn, packet.tcp.flags_ack, packet.tcp.flags_reset, packet.tcp.flags_fin)
-            else:
-                if source_ip == packet.ipv6.src:
-                    return ('1', packet.tcp.flags_syn, packet.tcp.flags_ack, packet.tcp.flags_reset, packet.tcp.flags_fin)
-                else:
-                    return ('0', packet.tcp.flags_syn, packet.tcp.flags_ack, packet.tcp.flags_reset, packet.tcp.flags_fin)
+            flags = (packet.tcp.flags_syn, packet.tcp.flags_ack, packet.tcp.flags_reset, packet.tcp.flags_fin)
+            return ('1' if source_ip == packet.ip.src else '0', *flags) if ipv4 else ('1' if source_ip == packet.ipv6.src else '0', *flags)
 
-        
+
+
         conn = {
-            'INIT': {('0', '1', '1', '0', '0'): 'S4', ('1', '0', '0', '0', '1'): 'SH', ('1', '1', '0', '0', '0'): 'S0'},
-            'S4': {('0', '0', '0', '1', '0'): 'SHR', ('0', '0', '0', '0', '1'): 'RSTRH'},
-            'SH': {}, 'SHR': {}, 'RSTRH': {}, 'OTH': {}, 'S0': {('0', '1', '1', '0', '0'): 'S1', ('0', '0', '0', '1', '0'): 'REJ', ('1', '0', '0', '1', '0'): 'RST0S0'},
-            'REJ': {}, 'RST0S0': {}, 'RST0': {}, 'RSTR': {}, 'S1': {('1', '0', '1', '0', '0'): 'ESTAB', ('1', '0', '0', '1', '0'): 'RST0', ('0', '0', '0', '1', '0'): 'RSTR'},
-            'ESTAB': {('1', '0', '1', '0', '1'): 'S2', ('0', '0', '1', '0', '1'): 'S3'},
-            'S2': {('0', '0', '1', '0', '0'): 'SF'},
-            'S3': {('1', '0', '1', '0', '0'): 'SF'},
-            'SF': {}
+            "INIT": {
+                (0, 1, 1, 0, 0): "S4",
+                (1, 0, 0, 0, 1): "SH",
+                (1, 1, 0, 0, 0): "S0",
+            },
+            "S4": {(0, 0, 0, 1, 0): "SHR", (0, 0, 0, 0, 1): "RSTRH"},
+            "SH": {},
+            "SHR": {},
+            "RSTRH": {},
+            "OTH": {},
+            "S0": {
+                (0, 1, 1, 0, 0): "S1",
+                (0, 0, 0, 1, 0): "REJ",
+                (1, 0, 0, 1, 0): "RST0S0",
+            },
+            "REJ": {},
+            "RST0S0": {},
+            "RST0": {},
+            "RSTR": {},
+            "S1": {
+                (1, 0, 1, 0, 0): "ESTAB",
+                (1, 0, 0, 1, 0): "RST0",
+                (0, 0, 0, 1, 0): "RSTR",
+            },
+            "ESTAB": {(1, 0, 1, 0, 1): "S2", (0, 0, 1, 0, 1): "S3"},
+            "S2": {(0, 0, 1, 0, 0): "SF"},
+            "S3": {(1, 0, 1, 0, 0): "SF"},
+            "SF": {},
         }
 
-        
-        if ipv4:
-            source_ip = packets[0].ip.src
-        else:
-            source_ip = packets[0].ipv6.src
+        source_ip = packets[0].ip.src if ipv4 else packets[0].ipv6.src
 
-        
-        connection_status = 'INIT'
+        connection_status = "INIT"
 
-        
         for packet in packets:
             key = process_packet_key(packet, source_ip)
             try:
                 connection_status = conn[connection_status][key]
             except KeyError:
-                status_mapping = {
-                    'INIT': 'OTH',
-                    'SH': 'SH',
-                    'SHR': 'SHR',
-                    'RSTRH': 'RSTRH',
-                    'OTH': 'OTH',
-                    'REJ': 'REJ',
-                    'RST0S0': 'RST0S0',
-                    'RST0': 'RST0',
-                    'RSTR': 'RSTR',
-                    'SF': 'SF'
-                }
+                status_mapping = {'INIT': 'OTH', 'SH': 'SH', 'SHR': 'SHR', 'RSTRH': 'RSTRH', 'OTH': 'OTH', 'REJ': 'REJ', 'RST0S0': 'RST0S0', 'RST0': 'RST0', 'RSTR': 'RSTR', 'SF': 'SF'}
                 return status_mapping.get(connection_status, 'OTH')
 
         return connection_status
 
-
-
     def _process_status_flag_IP(self):
-        if 'ip' in self.packet_list[0]:
+        if "ip" in self.packet_list[0]:
             self.src_ip = self.packet_list[0].ip.src
             self.dst_ip = self.packet_list[0].ip.dst
             self.status_flag = self.get_connection_status(self.packet_list)
@@ -198,9 +189,8 @@ class ConnectionRecord:
         )
 
 
-
 class NetworkPacketSniffer:
-    def __init__(self, pcap_file,filename):
+    def __init__(self, pcap_file, filename):
         self.cap_file = pcap_file
         self.service_mapping = {}
         self.service_map_file = filename
@@ -223,6 +213,7 @@ class NetworkPacketSniffer:
                 "urgent",
             ]
         ]
+
     def _get_connection_key(self, packet):
         if "tcp" in packet:
             return "tcp_conn" + packet.tcp.stream
@@ -231,16 +222,15 @@ class NetworkPacketSniffer:
         elif "icmp" in packet:
             return f"icmp_conn_{packet.ip.src}_{packet.ip.dst}_{packet.icmp.type}"
         else:
-            #for other protocol , we will sort out what to do with this case
+            # for other protocol , we will sort out what to do with this case
             pass
 
     def create_connection_records(self):
         # cap = pyshark.FileCapture(self.cap_file)              # this method directly gets the packet already capture , using FIlecapture can also acheive real time but with few sec delay
-        cap = pyshark.LiveCapture(interface = None)
+        cap = pyshark.LiveCapture(interface=None)
 
         # figuring out how to stop this and continue the feature extraction process
         # Also focus on parallelize "the packet read" and "feature extract process" if time permits
-
 
         raw_connections = defaultdict(list)
 
@@ -254,12 +244,9 @@ class NetworkPacketSniffer:
 
         return dict(raw_connections)
 
-    
-
     def get_iana(self):
-        
         filename = self.service_map_file
-        with open(filename, 'r', newline='') as csvfile:
+        with open(filename, "r", newline="") as csvfile:
             csvreader = csv.reader(csvfile)
             for row in csvreader:
                 try:
@@ -302,20 +289,25 @@ class NetworkPacketSniffer:
 
 
 def main():
-    service_file = 'service_map.csv'
+    service_file = "service_map.csv"
     if len(argv) == 1:
         cap_file = None
-        sniffer = NetworkPacketSniffer(cap_file,service_file)
+        sniffer = NetworkPacketSniffer(cap_file, service_file)
     elif len(argv) == 2:
         cap_file = argv[1]
-        sniffer = NetworkPacketSniffer(cap_file,service_file)
+        sniffer = NetworkPacketSniffer(cap_file, service_file)
     else:
-        print("-------------------------=-----------------------------------------------------------------------")
+        print(
+            "-------------------------=-----------------------------------------------------------------------"
+        )
         return
 
     connections = sniffer.process_packets()
     sniffer.save_records_to_csv()
-    print("##################################THE-END#######################################")
+    print(
+        "##################################THE-END#######################################"
+    )
+
 
 if __name__ == "__main__":
     main()
