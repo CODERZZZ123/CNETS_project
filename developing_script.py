@@ -7,6 +7,8 @@ class ConnectionRecord:
     def __init__(self, packet_list, idx):
         self.packet_list = packet_list
         self.idx = idx
+        self.dst_port = None
+        self.scr_port = None
         self.protocol_type = None
         self.service = None
         self.status_flag = None
@@ -52,23 +54,89 @@ class ConnectionRecord:
         self._process_bytes()
         self._process_status_flag()
 
-    def _process_tcp(self):
+    def _process_tcp(self ,service_mapping):
+        self.protocol = "tcp"
+        self.duration = float(self.packet_list[-1].tcp.time_relative)
+        self.src_port = int(self.packet_list[0].tcp.srcport)
+        self.dst_port = int(self.packet_list[0].tcp.dstport)
+        if self.src_port <= self.dst_port:
+            if ("tcp", self.src_port) not in service_mapping.keys():
+                self.service = "Unassigned"
+            else:
+                self.service = service_mapping[("tcp", self.src_port)]
+        else:
+            if ("tcp", self.dst_port) not in service_mapping.keys():
+                self.service = "Unassigned"
+            else:
+                self.service = service_mapping[("tcp", self.dst_port)]
+                
         pass
 
-    def _process_udp(self):
-        # Process UDP-specific features if needed
+    def _process_udp(self,service_mapping):
+        self.protocol = 'udp'
+        self.duration = float(self.packet_list[-1].udp.time_relative)
+        self.src_port = int(self.packet_list[0].udp.srcport)
+        self.dst_port = int(self.packet_list[0].udp.dstport)
+        if self.src_port <= self.dst_port:
+            if ('udp', self.src_port) not in service_mapping.keys():
+                self.service="Unassigned"
+            else:
+                self.service = service_mapping[('udp', self.src_port)]
+        else:
+            if ('udp', self.dst_port) not in service_mapping.keys():
+                self.service="Unassigned"
+            else:
+                self.service = service_mapping[('udp', self.dst_port)]
         pass
 
     def _process_icmp(self):
-        # Process ICMP-specific features if needed
+        self.protocol = 'icmp'
+        self.src_port = int(self.packet_list[0].icmp.srcport)
+        self.dst_port = int(self.packet_list[0].icmp.dstport)
+        self.duration = float(self.packet_list[0].icmp.time_relative)
+    
+        self.service = 'eco_i'         # ? why only eco_i , lets serch for other 
         pass
 
-    def _process_bytes(self):
-        # Process byte-related features if needed
+    def _process_bytes_land_wrong_urgent_timestamp_duration(self):
+        if self.src_ip == self.dst_ip and self.src_port == self.dst_port:
+            land = 1
+        else:
+            land = 0
+
+        timestamp = self.packet_list[-1].sniff_timestamp
+        # traverse packets (some basic features are aggregated from each packet in whole connection)
+        for packet in self.packet_list:
+            if 'ip' in self.packet_list[0]:
+                if self.src_ip == packet.ip.src:
+                    self.src_bytes += int(packet.length.size)
+                else:
+                    self.dst_bytes += int(packet.length.size)
+            else:
+                if self.src_ip == packet.ipv6.src:
+                    self.src_bytes += int(packet.length.size)
+                else:
+                    self.dst_bytes += int(packet.length.size)
+
+            # Urgent packets only happen with TCP
+            if self.protocol == 'tcp':
+                if packet.tcp.flags_urg == '1':
+                    self.urgent += 1
+                if packet.tcp.checksum_status != '2':
+                    self.wrong_frag += 1
+
+            elif self.protocol == 'udp':
+                if packet.udp.checksum_status != '2':
+                    self.wrong_frag += 1
+
+            elif self.protocol == 'icmp':
+                if packet.icmp.checksum_status != '2':
+                    self.wrong_frag += 1
+        self.timestamp = self.packet_list[-1].sniff_timestamp
         pass
 
     def _process_status_flag(self):
-        # Process status flag if needed
+        
         pass
 
     def __str__(self):
