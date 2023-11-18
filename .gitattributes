@@ -1,0 +1,5 @@
+cnet_proj/ filter=lfs diff=lfs merge=lfs -text
+cnet_proj/** filter=lfs diff=lfs merge=lfs -text
+cnet_proj/bin filter=lfs diff=lfs merge=lfs -text
+cnet_proj/lib filter=lfs diff=lfs merge=lfs -text
+cnet_proj/pyvenv.cfg filter=lfs diff=lfs merge=lfs -text
