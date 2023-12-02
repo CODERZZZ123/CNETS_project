@@ -215,9 +215,24 @@ class Connection_Host_Client:
                 return status_mapping.get(connection_status, "OTH")
 
         return connection_status
+    def hex_extract(self,hex_payload):
+        command = None
+        if len(hex_payload) % 2 != 0:
+            hex_payload = "0" + hex_payload
+
+        try:
+            # Convert hex to bytes and then decode to string
+            command_bytes = bytes.fromhex(hex_payload)
+            command = command_bytes.decode().lower()
+
+            # Now 'command' holds the string representation of the hex payload
+            print("Command:", command)
+        except ValueError as e:
+            print("Error decoding hex payload:", e)
+            command = "Nan"
+        return command
 
     def num_failed_login_func(self):
-        num_failed_logins = 0
         failed_login_patterns = [
             "failed login",
             "login failed",
@@ -240,20 +255,19 @@ class Connection_Host_Client:
         for packet in self.packet_list:
             try:
                 # Extract payload and convert to lowercase for case-insensitive matching
-                payload = packet.tcp.payload.lower()
-
-                # Check for root access patterns
-                if any(pattern in payload for pattern in failed_login_patterns):
-                    num_failed_logins = num_failed_logins + 1
+                payload = getattr(packet.tcp, "payload", None)
+                if payload is not None:
+                    command_list = packet.tcp.payload.replace(":", "")
+                    command = self.hex_extract(command_list)
+                    if any(pattern in command for pattern in failed_login_patterns):
+                        self.num_failed_logins = self.num_failed_logins + 1
                     # You can further analyze or log the event here
+                else:
+                    print("Payload attribute is missing for this packet.")
             except AttributeError:
                 continue
-        return num_failed_logins
 
     def root_related(self):
-        root_shell = 0
-        su_attempted = 0
-        num_root = 0
         root_access_patterns = [
             "root",
             "sudo",
@@ -269,21 +283,22 @@ class Connection_Host_Client:
         for packet in self.packet_list:
             try:
                 # Extract payload and convert to lowercase for case-insensitive matching
-                payload = packet.tcp.payload.lower()
-
-                # Check for root access patterns
-                if any(pattern in payload for pattern in root_access_patterns):
-                    root_shell = 1
-                    su_attempted = 1
-                    num_root = num_root + 1
+                payload = getattr(packet.tcp, "payload", None)
+                if payload is not None:
+                    command_list = packet.tcp.payload.replace(":", "")
+                    command = self.hex_extract(command_list)
+                    # Check for root access patterns
+                    if any(pattern in command for pattern in root_access_patterns):
+                        self.root_shell = 1
+                        self.su_attempted = 1
+                        self.num_root = self.num_root + 1
+                else:
+                    print("Payload attribute is missing for this packet.")
                     # You can further analyze or log the event here
             except AttributeError:
                 continue
-        return root_shell, su_attempted, num_root
 
     def files_related(self):
-        num_file_creations = 0
-        num_access_files = 0
         file_creation_patterns = [
             "create file",
             "touch",
@@ -320,11 +335,10 @@ class Connection_Host_Client:
                 # Extract payload and convert to lowercase for case-insensitive matching
                 payload = getattr(packet.tcp, "payload", None)
                 if payload is not None:
-                    payload_lower = payload.lower()
-                    if any(
-                        pattern in payload_lower for pattern in file_creation_patterns
-                    ):
-                        num_file_creations += 1
+                    command_list = packet.tcp.payload.replace(":", "")
+                    command = self.hex_extract(command_list)
+                    if any(pattern in command for pattern in file_creation_patterns):
+                        self.num_file_creations += 1
                     # Continue with processing payload_lower
                 else:
                     # Handle the case where 'payload' attribute is missing
@@ -338,17 +352,16 @@ class Connection_Host_Client:
             # Assuming the payload contains information about file access
             payload = getattr(packet.tcp, "payload", None)
             if payload is not None:
-                payload_lower = payload.lower()
-                if any(pattern in payload_lower for pattern in file_creation_patterns):
-                    num_file_creations += 1
+                command_list = packet.tcp.payload.replace(":", "")
+                command = self.hex_extract(command_list)
+                if any(pattern in command for pattern in file_creation_patterns):
+                    self.num_file_creations += 1
                 # Continue with processing payload_lower
             else:
                 # Handle the case where 'payload' attribute is missing
                 print("Payload attribute is missing for this packet.")
 
             # Check for specific patterns or keywords indicating file access
-
-        return num_file_creations, num_access_files
 
     def logged_in_func(self):
         successful_login_patterns = [
@@ -376,21 +389,25 @@ class Connection_Host_Client:
             "authenticated user",
             "access allowed",
         ]
-        logged_in = 0
         for packet in self.packet_list:
             try:
-                # Extract payload and convert to lowercase for case-insensitive matching
-                payload = packet.tcp.payload.lower()
+                payload = getattr(packet.tcp, "payload", None)
+                if payload is not None:
+                    command_list = packet.tcp.payload.replace(":", "")
+                    command = self.hex_extract(command_list)
+                    # Extract payload and convert to lowercase for case-insensitive matching
+                    # Check for file creation patterns
+                    if any(
+                        pattern in command for pattern in successful_login_patterns
+                    ):
+                        self.logged_in = 1
+                else:
+                    print("Payload attribute is missing for this packet.")
 
-                # Check for file creation patterns
-                if any(pattern in payload for pattern in successful_login_patterns):
-                    logged_in = 1
             except AttributeError:
                 continue
-        return logged_in
 
     def compromised(self):
-        num_compromised = 0
         compromised_patterns = [
             "exploit",
             "malware",
@@ -420,24 +437,55 @@ class Connection_Host_Client:
         for packet in self.packet_list:
             try:
                 # Extract payload and convert to lowercase for case-insensitive matching
-                payload = packet.tcp.payload.lower()
+                payload = getattr(packet.tcp, "payload", None)
 
-                # Check for file creation patterns
-                if any(pattern in payload for pattern in compromised_patterns):
-                    num_compromised = num_compromised + 1
+                if payload is not None:
+                    command_list = packet.tcp.payload.replace(":", "")
+                    command = self.hex_extract(command_list)
+                    # Check for file creation patterns
+                    if any(pattern in command for pattern in compromised_patterns):
+                        self.num_compromised = self.num_compromised + 1
+                else:
+                    print("Payload attribute is missing for this packet.")
+
             except AttributeError:
                 continue
-        return num_compromised
+
+    def logged_in_root_failed(self):
+        for packet in self.packet_list:
+            try:
+                # Get the ASCII output
+                command_list = packet.tcp.payload.replace(":", "")
+                command = self.hex_extract(command_list)
+
+                print(command, end="")
+
+                # First check if for login attempt successful or not
+                if self.logged_in == 1:
+                    # User is logged in, try to get the prompt!
+                    if "#" in command:
+                        self.root_shell = 1
+                    if "$" or "#" in command:
+                        print(command, end="")
+                else:
+                    # User is NOT logged in
+                    if "Last login" in command:
+                        self.logged_in = 1
+                    if "failed" in command:
+                        self.num_failed_logins += 1
+            except UnicodeDecodeError:
+                continue
+            except AttributeError:
+                continue
 
     def get_content_data(self):
         if self.protocol_type == "TCP":
-            print("+++++++" , self.packet_list[0].tcp.payload.lower() , "++++++++++++++++")
-            self.num_compromised = self.compromised()
+            self.compromised()
             self.logged_in = self.logged_in_func()
-
             self.num_failed_logins = self.num_failed_login_func()
-            self.root_shell, self.su_attempted, self.num_root = self.root_related()
-            self.num_file_creations, self.num_access_files = self.files_related()
+            self.root_related()
+            self.files_related()
+            # self.logged_in_root_failed()
 
     def _process_status_flag_IP(self):
         if (
