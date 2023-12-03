@@ -37,6 +37,18 @@ class Connection_Host_Client:
         self.num_outbound_cmds = 0
         self.is_hot_login = 0
         self.is_guest_login = 0
+        self.long_services = {}
+        self.srv_long_hosts = {}
+        self.long_count = 0
+        self.long_serror_count = 0
+        self.long_rerror_count = 0
+        self.long_same_services = 0
+        self.long_diff_services = 0
+        self.long_same_src_ports = 0
+        self.srv_long_count = 0
+        self.srv_long_serror_count = 0
+        self.srv_long_rerror_count = 0
+        self.srv_long_diff_hosts = 0
 
     def process(self, service_mapping):
         if "udp" in self.packet_list[0] or "UDP" in self.packet_list[0]:
@@ -60,7 +72,7 @@ class Connection_Host_Client:
             return "None"
         # self.src_port = int(self.packet_list[0][self.protocol_type].srcpo_type
         self._process_common()
-        self.get_content_data()
+        self.operations_data()
 
     def _process_common(self):
         self._process_bytes_land_wrong_urgent_timestamp()
@@ -216,21 +228,32 @@ class Connection_Host_Client:
 
         return connection_status
     def hex_extract(self,hex_payload):
-        command = None
-        if len(hex_payload) % 2 != 0:
-            hex_payload = "0" + hex_payload
+            command = None
+            if len(hex_payload) % 2 != 0:
+                hex_payload = "0" + hex_payload
 
-        try:
-            # Convert hex to bytes and then decode to string
-            command_bytes = bytes.fromhex(hex_payload)
-            command = command_bytes.decode().lower()
+            try:
+                # Convert hex to bytes and then decode to string
+                command_bytes = bytes.fromhex(hex_payload)
+                command = command_bytes.decode().lower()
 
-            # Now 'command' holds the string representation of the hex payload
-            print("Command:", command)
-        except ValueError as e:
-            print("Error decoding hex payload:", e)
-            command = "Nan"
-        return command
+                # Now 'command' holds the string representation of the hex payload
+                print("Command:", command)
+            except ValueError as e:
+                try:
+                    # Convert hex to bytes
+                    payload_bytes = bytes.fromhex(hex_payload)
+
+                    # Convert bytes to string by ignoring non-ASCII characters
+                    payload_string = "".join(chr(byte) if 32 <= byte < 127 else '?' for byte in payload_bytes)
+
+                    return payload_string
+                except ValueError as e:
+                    print("Error decoding hex payload:", e)
+                    return "Nan"
+            return command
+
+
 
     def num_failed_login_func(self):
         failed_login_patterns = [
@@ -312,7 +335,7 @@ class Connection_Host_Client:
             "generate file",
         ]
 
-        file_patterns = file_patterns = [
+        file_patterns  = [
             "open_file",
             "read_file",
             "write_file",
@@ -354,7 +377,7 @@ class Connection_Host_Client:
             if payload is not None:
                 command_list = packet.tcp.payload.replace(":", "")
                 command = self.hex_extract(command_list)
-                if any(pattern in command for pattern in file_creation_patterns):
+                if any(pattern in command for pattern in file_patterns):
                     self.num_file_creations += 1
                 # Continue with processing payload_lower
             else:
@@ -478,14 +501,118 @@ class Connection_Host_Client:
             except AttributeError:
                 continue
 
-    def get_content_data(self):
+    def operations_data(self):
         if self.protocol_type == "TCP":
             self.compromised()
-            self.logged_in = self.logged_in_func()
-            self.num_failed_logins = self.num_failed_login_func()
+            # self.logged_in = self.logged_in_func()
+            # self.num_failed_logins = self.num_failed_login_func()
             self.root_related()
             self.files_related()
-            # self.logged_in_root_failed()
+            self.logged_in_root_failed()
+    def calculate_long_count(connections, current_connection):
+        dst_ip = current_connection["dst_ip"]
+        long_count = 0
+
+        for connection in connections:
+            if connection["dst_ip"] == dst_ip:
+                long_count += 1
+
+        return long_count
+    def calculate_long_count(self,connections):
+        for connection in connections:
+            if connection.dst_ip == self.dst_ip:
+                self.long_count += 1
+                self.R_error_S_error(connection)
+            else : 
+                self.other_feature(connection)
+        if self.long_count > 0:
+            self.long_serror_rate = self.long_serror_count / self.long_count
+            self.long_rerror_rate = self.long_rerror_count / self.long_count
+            if self.long_diff_services > 1:
+                self.long_diff_srv_rate = self.long_diff_services / self.long_count
+            else:
+                self.long_diff_srv_rate = 0
+            self.long_same_srv_rate = self.long_same_services / self.long_count
+            self.long_same_src_port_rate = self.long_same_src_ports / self.long_count
+
+        else:
+            self.long_serror_rate = 0
+            self.long_rerror_rate = 0
+            self.long_diff_srv_rate = 0
+            self.long_same_srv_rate = 0
+            self.long_same_src_port_rate = 0
+
+        if self.srv_long_count > 0:
+            self.srv_long_serror_rate = self.srv_long_serror_count / self.srv_long_count
+            self.srv_long_rerror_rate = self.srv_long_rerror_count / self.srv_long_count
+            if self.srv_long_diff_hosts > 1:
+                self.srv_long_diff_host_rate = self.srv_long_diff_hosts / self.srv_long_count
+            else:
+                self.srv_long_diff_host_rate = 0
+        else:
+            self.srv_long_serror_rate = 0
+            self.srv_long_rerror_rate = 0
+        self.srv_long_diff_host_rate = 0
+
+
+    
+    def other_feature(self,connection):
+        if self.service == connection.service:
+            self.srv_long_count += 1
+            # count various errors
+            if connection.status_flag != "SF":
+                if 'S' in connection.status_flag:
+                    self.srv_long_serror_count += 1
+                elif 'R' in connection.status_flag : 
+                    self.srv_long_rerror_count += 1
+
+            if self.srv_long_count == 1:
+                self.srv_long_hosts[self.srv_long_diff_hosts] = connection.dst_ip
+                self.srv_long_diff_hosts += 1
+            else:
+                j = 0
+                for j in range(0, self.srv_long_diff_hosts, 1):
+                    if self.srv_long_hosts[j] == connection.dst_ip:
+                        break
+                if j == self.srv_long_diff_hosts:
+                    self.srv_long_hosts[self.srv_long_diff_hosts] = connection.dst_ip
+                    self.srv_long_diff_hosts += 1
+
+
+    def R_error_S_error(self,connection):
+            if connection.dst_ip == self.dst_ip:
+                if self.status_flag != "SF":
+                    if 'S' in connection.status_flag:
+                        self.long_serror_count += 1
+                    elif 'R' in connection.status_flag:
+                        self.ong_rerror_count += 1
+                if self.service == connection.service:
+                        self.long_same_services += 1
+
+                if self.long_count == 1:
+                    self.long_services[self.long_diff_services] = connection.service
+                    self.long_diff_services += 1
+                else:
+                    j = 0
+                    for j in range(0, self.long_diff_services, 1):
+                        if self.long_services[j] == connection.service:
+                            break
+                    if j == self.long_diff_services:
+                        self.long_services[self.long_diff_services] = connection.service
+                        self.long_diff_services += 1
+
+                if self.src_port == connection.src_port:
+                    self.long_same_src_ports += 1
+                
+
+
+    def derive_host_features(self, connections, hosts):
+        # print(self.timestamp)
+        self.calculate_long_count(connections)
+
+    
+
+        
 
     def _process_status_flag_IP(self):
         if (
@@ -511,7 +638,10 @@ class Connection_Host_Client:
             f"{self.hot},{self.num_failed_logins},{self.logged_in},"
             f"{self.num_compromised},{self.root_shell},{self.su_attempted},"
             f"{self.num_root},{self.num_file_creations},{self.num_access_files},"
-            f"{self.num_outbound_cmds},{self.is_hot_login},{self.is_guest_login}"
+            f"{self.num_outbound_cmds},{self.is_hot_login},{self.is_guest_login},"
+            f"{self.long_services},{self.srv_long_hosts},{self.long_count},{self.long_serror_count},"
+            f"{self.long_rerror_count},{self.long_same_services},{self.long_diff_services},{self.long_same_src_ports},"
+            f"{self.srv_long_count},{self.srv_long_serror_count},{self.srv_long_rerror_count},{self.srv_long_diff_hosts}"
         )
 
 
@@ -548,6 +678,17 @@ class NetworkPacketSniffer:
                 "num_outbound_cmds",
                 "is_hot_login",
                 "is_guest_login",
+                "srv_long_hosts",
+                "long_count",
+                "long_serror_count",
+                "long_rerror_count",
+                "long_same_services",
+                "long_diff_services",
+                "long_same_src_ports",
+                "srv_long_count",
+                "srv_long_serror_count",
+                "srv_long_rerror_count",
+                "srv_long_diff_hosts"
             ]
         ]
 
@@ -591,10 +732,11 @@ class NetworkPacketSniffer:
             csvreader = csv.reader(csvfile)
             for row in csvreader:
                 try:
-                    service = row[0]
+                    service = row[2]
                     port = int(row[1])
-                    protocol = row[2].lower()
-
+                    protocol = row[0]
+                    print(service)
+                    print(port)
                     if service and port and protocol:
                         port_protocol_tuple = (protocol, port)
                         self.service_mapping[port_protocol_tuple] = service
@@ -609,8 +751,10 @@ class NetworkPacketSniffer:
         for key, packet_list in raw_connections.items():
             connection = Connection_Host_Client(packet_list, idx)
             connection.process(self.service_mapping)
+            if connection.status_flag == None :
+                continue
             connections.append(connection)
-            self.records.append(str(connection))
+            
             idx += 1
         # print(self.records)
         return connections
@@ -620,6 +764,10 @@ class NetworkPacketSniffer:
         raw_connections = self.create_connection_records()
         connections = self.connection_to_setup(raw_connections)
 
+        for host_client in connections : 
+            host_client.derive_host_features(connections , len(connections))
+            print("-------------------------------")
+            self.records.append(str(host_client))
         # other feature like host features and server feature to be added soon
 
         return connections
